@@ -13,6 +13,7 @@ module Dots
   VERSION = '0.0.1'
 end
 
+# TODO: Commands should fail if repo does not exist (e.g. dots commit, dots add, ...)
 module Dots
   class CommandLine < Thor
     desc 'init <git repo URL>', 'Initialize or copy a dots repo.'
@@ -20,9 +21,14 @@ module Dots
       run do
         dots_dir = File.join(Dir.home, '.dots')
         git_repo_url = Dots::GitRepo.absolute_url(git_repo_url)
-        Dots::Repo.create(dots_dir, git_repo_url)
 
-        puts ok("Repo initialized at #{Path.shorten dots_dir}.")
+        if repo_exists? git_repo_url
+          Dots::Repo.clone(dots_dir, git_repo_url)
+          puts ok("Repo initialized at #{Path.shorten dots_dir} from #{git_repo_url}.")
+        else
+          Dots::Repo.create(dots_dir, git_repo_url)
+          puts ok("Repo initialized at #{Path.shorten dots_dir}.")
+        end
       end
     end
 
@@ -80,6 +86,13 @@ module Dots
 
     def ok(message)
       "[#{'OK'.green}] #{message}"
+    end
+
+    def repo_exists?(repo_url)
+      git = Programs.git.create('ls-remote', repo_url)
+      git.start
+      git.wait
+      git.exit_code == 0
     end
   end
 end
@@ -158,11 +171,11 @@ module Dots
   end
 
   class Assets
-    def self.settings_rb
-      @@settings_rb.to_s
+    def self.config_rb
+      @@config_rb.to_s
     end
 
-    @@settings_rb = Asset.new('settings.rb')
+    @@config_rb = Asset.new('config.rb')
   end
 end
 
@@ -371,6 +384,26 @@ module Dots
     end
   end
 
+  class GitClone < Action
+    def initialize(dir, repo_url)
+      @dir = dir
+      @repo_url = repo_url
+    end
+
+    def preview
+      "git clone #{@repo_url} #{Path.shorten @dir}"
+    end
+
+    def run
+      # TODO: What if @dir already exists?
+      Programs.git.run('clone', @repo_url, @dir)
+    end
+
+    def undo
+      # TODO: Delete @dir.
+    end
+  end
+
   class Runner
     def initialize
     end
@@ -463,9 +496,23 @@ module Dots
         CreateDir.new(repo_dir),
         GitInit.new(repo_dir),
         GitAddRemote.new(repo_dir, 'origin', git_repo_url),
-        CopyTree.new(Assets.settings_rb, repo_dir),
-        GitAdd.new(dir, File.join(repo_dir, File.basename(Assets.settings_rb)))
+        CopyTree.new(Assets.config_rb, repo_dir),
+        GitAdd.new(dir, File.join(repo_dir, File.basename(Assets.config_rb)))
         # CopyTree.new(Assets.post_merge_hook, repo_dir...)
+      ]
+
+      Runner.new.run(actions)
+    end
+
+    def self.clone(dir, git_repo_url)
+      if !dir || dir.strip.empty?
+        raise DotsError, 'Specify a directory.'
+      end
+
+      repo_dir = File.absolute_path(dir)
+
+      actions = [
+        GitClone.new(repo_dir, git_repo_url)
       ]
 
       Runner.new.run(actions)
