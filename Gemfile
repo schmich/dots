@@ -1,3 +1,3 @@
-gem 'thor'
-gem 'childprocess'
-gem 'colorize'
+source 'https://rubygems.org'
+
+gemspec

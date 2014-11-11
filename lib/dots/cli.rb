@@ -9,10 +9,6 @@ module Dots
   end
 end
 
-module Dots
-  VERSION = '0.0.1'
-end
-
 # TODO: Commands should fail if repo does not exist (e.g. dots commit, dots add, ...)
 module Dots
   class CommandLine < Thor
@@ -541,5 +537,3 @@ module Dots
     end
   end
 end
-
-Dots::CommandLine.start(ARGV)
